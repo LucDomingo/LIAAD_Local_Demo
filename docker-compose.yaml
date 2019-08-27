@@ -1,0 +1,28 @@
+version: '3'
+services:
+  frontendsvc:
+    image: 329719/demo
+    ports:
+      - "3000:3000"
+      - "8003:8003"
+    depends_on:
+      - mongodbsvc
+  pypamposvc:
+    image: 329719/pypampo
+  contamehistoriassvc:
+    image: 329719/contamehistorias
+  yakesvc:
+    image: 329719/yake
+  mongodbsvc:
+    image: mongo:latest
+    expose:
+      - "27017"
+  liaadnlpserver:
+    image: liaadnlpserver
+    build: ./tools/nlp-microservices
+    environment:
+      - MODE=dev
+    volumes:
+      - ./tools/nlp-microservices:/code
+    ports:
+      - "9091:9091"

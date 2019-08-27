@@ -1,33 +1,14 @@
+import urllib.request
+import json
+import base64
+import binascii
+import re
 from lxml import html
 from lxml.html.clean import clean_html
-
-import urllib.request
-import json    
-
-import nltk
-from gensim.summarization import keywords
-from gensim.summarization.summarizer import summarize
-
-from nltk.corpus import stopwords
-from gensim.models import KeyedVectors
-
-from tools.pampo.pampo.ner import extract_entities
-from tools.contamehistorias.datasources.webarchive import ArquivoPT
-from tools.contamehistorias import engine
-import tools.yake.yake as yake
-from tools.yake.yake import KeywordExtractor
-from textblob import TextBlob
-import langid
-from flask import jsonify
-import re
 import nltk
 nltk.download('punkt')
 
-
-
-import numpy as np
 from datetime import datetime
-
 
 def strip_html_tags(html_text):
     
@@ -36,9 +17,6 @@ def strip_html_tags(html_text):
     result = clean_tree.text_content().strip()
     result = result.replace("\\n","").replace("\\t","").replace("\\r","")
     return result
-
-def extract_keywords(text):
-    return keywords(text, ratio=0.3).split('\n')
 
 def summarize_content(text, ratio=0.2):
     return summarize(text, ratio)
@@ -49,7 +27,7 @@ def suggest_title(prefix):
         'text': prefix
     }
 
-    url = 'http://0.0.0.0:9091/1.0/natural-language-understanding/title-generator/'
+    url = 'http://liaadnlpserver:9091/1.0/natural-language-understanding/title-generator/'
 
     params = json.dumps(data).encode('utf8')
     req = urllib.request.Request(url, data=params,
@@ -68,7 +46,7 @@ def generate(prefix):
         'text': prefix
     }
 
-    url = 'http://0.0.0.0:9091/1.0/natural-language-understanding/text-generation/'
+    url = 'http://liaadnlpserver:9091/1.0/natural-language-understanding/text-generation/'
 
     params = json.dumps(data).encode('utf8')
     req = urllib.request.Request(url, data=params,
@@ -83,7 +61,7 @@ def similar_sentences(text):
         'text': text
     }
 
-    url = 'http://0.0.0.0:9091/1.0/natural-language-understanding/similar-sentences/'
+    url = 'http://liaadnlpserver:9091/1.0/natural-language-understanding/similar-sentences/'
 
     params = json.dumps(data).encode('utf8')
     req = urllib.request.Request(url, data=params,
@@ -98,7 +76,7 @@ def classify_sentency_purpose(sentence):
         'text': sentence
     }
 
-    url = 'http://0.0.0.0:9091/1.0/natural-language-understanding/sentence-classifier/'
+    url = 'http://liaadnlpserver:9091/1.0/natural-language-understanding/sentence-classifier/'
 
     params = json.dumps(data).encode('utf8')
     req = urllib.request.Request(url, data=params,
@@ -159,45 +137,55 @@ def organized_sentences_by_purposes(content_analyzed,original):
     return(combined_result) 
 
 
-def response_json(pred,data,model):
-        model_predictor = pred[model]
+def response_json(data,model):
+
+        output={'user':"",'select':""}
 
         if model=="pampo":
-            pampo=pred[model]
             keywords1="No text given"
             keywords2="No demo text given"
+            url = 'http://pypamposvc:8000/pampo'
             try:
                 dt=data['user']
-                keywords1 = pampo(dt)
-            except:
-                pass
-            
+                data = {'text': dt}
+                params = json.dumps(data).encode('utf8')
+                req = urllib.request.Request(url, data=params,headers={'content-type': 'application/json'})
+                response = urllib.request.urlopen(req)
+                predictions = json.loads(response.read().decode('utf8'))            
+                keywords1 = predictions
+                origin="("+"|".join(keywords1)+")" 
+                dt=re.split(origin,dt)
+                keywords2 = {'text':dt,'tokens':keywords1}
+            except Exception as e:
+                print(e)
+                       
             try:
                 dt=data['select']
-                keywords2 = pampo(dt)
-            except:
-                pass
-            
-
+                data = {'text': dt}
+                params = json.dumps(data).encode('utf8')
+                req = urllib.request.Request(url, data=params,headers={'content-type': 'application/json'})
+                response = urllib.request.urlopen(req)
+                predictions = json.loads(response.read().decode('utf8'))                
+                keywords2 = predictions
+                origin="("+"|".join(keywords2)+")" 
+                dt=re.split(origin,dt)
+                keywords2 = {'text':dt,'tokens':keywords2}
+            except Exception as e:
+                print(e)
             output={'user':"",'select':""}
             output['user']=keywords1
             output['select']=keywords2
-
         elif model=="conta":
             start_date=""
             end_date=""
             domain=data['domain']
-
-            try:
-                
-
+            try:               
                 start_date= (data['date'][0])[0:10]+" 00:00:00"
-                end_date= (data['date'][1])[0:10]+" 00:00:00"
-
+                end_date= (data['date'][1])[0:10]+" 00:00:00" 
                 start_date = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S')
                 end_date = datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S')
-
- 
+                end_date = end_date.strftime("%Y-%m-%d %H:%M:%S")
+                start_date = start_date.strftime("%Y-%m-%d %H:%M:%S")
             except:
                 pass
             try:
@@ -215,40 +203,69 @@ def response_json(pred,data,model):
                     date = datetime.now()
                     begin=int(date.year)-15
                     date = date.replace(year=begin)
-                end_date = datetime.now()
-                start_date = date
+                end_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                start_date = date.strftime("%Y-%m-%d %H:%M:%S")
             except:
                 pass
-
-
-            params = { 'domains':domain, 
-                'from':start_date, 
-                'to':end_date }
-            query=data['keywords']
-            apt =  pred[model]()
-            search_result = apt.getResult(query=query, **params)
-            cont = engine.TemporalSummarizationEngine()
-            intervals = cont.build_intervals(search_result, "pt")
-            out=cont.pprint(intervals)
+            url='http://contamehistoriassvc:8000/conta'
+            params = { 'domains':domain,'query':data['keywords'],
+                'start_date':start_date, 
+                'end_date':end_date}
+            params = json.dumps(params).encode('utf8')
+            req = urllib.request.Request(url, data=params,headers={'content-type': 'application/json'})
+            response = urllib.request.urlopen(req)
+            out = json.loads(response.read().decode('utf8')) 
             output={'text':"","date":[],"article":[]}
             output['text']=out[0]
             output['date']=out[1][0]
             output['article']=out[1][1]
-                
+
+        elif model=="generate":
+            text = data["text"]  
+            text = strip_html_tags(text)
+            results = generate(text)
+            output={'original':"",'result':""}
+            output['result']=results
+            output['original']=text
+        elif model=="title":
+            text = data["text"]
+            text = strip_html_tags(text)
+            results = suggest_title(text)
+            output={'original':"",'result':""}
+            output['result']=results
+            output['original']=text      
+        elif model=="summarization":
+            text = data["text"]
+            text = strip_html_tags(text)   
+            output={'result':""}
+            output['result']=summarize_content(text)
+        elif model=="classify":
+            output={"result":[]}
+            try:
+                dt=data['user']
+            except:
+                dt=data['select']
+            my_content_analyzed = analyze_content_purpose(dt)
+            output['result']=my_content_analyzed
         elif model=="yake":
-            func=pred[model]()
             keywords1="No text given"
             keywords2="No demo text given"
             original1=""
             original2=""
             origin=""
+            lan="en"
+            url='http://yakesvc:8000/yake'
             try:
                 dt=data['user']
                 n=int(data['slider1'])
                 top=int(data['slider2'])
-                
-                custom_kwextractor = yake.KeywordExtractor(lan="en", n=n, dedupLim=0.9, dedupFunc='seqm', windowsSize=1, top=top, features=None)
-                keywords1 = custom_kwextractor.extract_keywords(dt)
+                params = { 'text':dt,'language':lan,
+                'max_ngram_size':n, 
+                'number_of_keywords':top}
+                params = json.dumps(params).encode('utf8')
+                req = urllib.request.Request(url, data=params,headers={'content-type': 'application/json'})
+                response = urllib.request.urlopen(req)
+                keywords1 = json.loads(response.read().decode('utf8'))                              
                 temp=[]
                 tempup=[]
                 for i in range (0,len(keywords1)):
@@ -265,8 +282,13 @@ def response_json(pred,data,model):
                 dt=data['select'][3:]
                 n=data['slider1']
                 top=data['slider2']
-                custom_kwextractor = yake.KeywordExtractor(lan=lan, n=n, dedupLim=0.9, dedupFunc='seqm', windowsSize=1, top=top, features=None)
-                keywords2 = custom_kwextractor.extract_keywords(dt)
+                params = { 'text':dt,'language':lan,
+                'max_ngram_size':n, 
+                'number_of_keywords':top}
+                params = json.dumps(params).encode('utf8')
+                req = urllib.request.Request(url, data=params,headers={'content-type': 'application/json'})
+                response = urllib.request.urlopen(req)
+                keywords2 = json.loads(response.read().decode('utf8'))
 
                 temp=[]
                 tempup=[]
@@ -285,55 +307,25 @@ def response_json(pred,data,model):
             output['select']=keywords2
             output['original1']=original1
             output['original2']=original2
-
-
-        elif model=="sentiment_analyser":
-            result={}
-            sentiment = pred[model](data['text']).sentiment
-
-            output={'polarity':"",'subjectivity':""}
-            output['polarity'] = str(round(sentiment.polarity,2))
-            output['subjectivity'] =str (round(sentiment.subjectivity,2))
-        elif model=="generate":
-            text = data["text"]  
-            text = strip_html_tags(text)
-            results = pred[model](text)
-            output={'original':"",'result':""}
-            output['result']=results
-            output['original']=text
-        elif model=="title":
-            text = data["text"]
-            text = strip_html_tags(text)
-            results = pred[model](text)
-            output={'original':"",'result':""}
-            output['result']=results
-            output['original']=text
-        elif model=="similar":
-            text = data["text"]
-            text = strip_html_tags(text)    
-            results = []
-            for sent in  pred[model](text):
-                results.append(sent)
-            output={'result':""}
-            output['result']=results         
-        elif model=="summarization":
-            text = data["text"]
-            text = strip_html_tags(text)   
-            output={'result':""}
-            output['result']=pred[model](text)   
-        elif model=="language_detection":
-            text = data["text"]
-            output={'result':""}
-            output['result']=langid.classify(text)[0] 
-        elif model=="classify":
-            output={"result":[]}
-            try:
-                dt=data['user']
-            except:
-                dt=data['select']
-            my_content_analyzed = analyze_content_purpose(dt)
-            print(my_content_analyzed)
-            output['result']=my_content_analyzed
-
-
         return output
+def int_to_slug(i: int) -> str:
+    """
+    Turn an integer id into a semi-opaque string slug
+    to use as the permalink.
+    """
+    byt = str(i).encode('utf-8')
+    slug_bytes = base64.urlsafe_b64encode(byt)
+    return slug_bytes.decode('utf-8')
+
+def slug_to_int(slug: str):
+    """
+    Convert the permalink slug back to the integer id.
+    Returns ``None`` if slug is not well-formed.
+    """
+    byt = slug.encode('utf-8')
+    try:
+        int_bytes = base64.urlsafe_b64decode(byt)
+        return int(int_bytes)
+    except (binascii.Error, ValueError):
+        logger.error("Unable to interpret slug: %s", slug)
+        return None

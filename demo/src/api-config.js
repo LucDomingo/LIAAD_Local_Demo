@@ -15,4 +15,4 @@ if (origin.includes(':3000')) {
     apiRoot = origin;
 }
 
-export const API_ROOT = apiRoot;
+export const API_ROOT = "http://127.0.0.1:8003";

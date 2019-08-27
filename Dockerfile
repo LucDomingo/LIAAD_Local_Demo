@@ -1,40 +1,32 @@
-FROM library/python:3.7.1-alpine
-
-WORKDIR /workdir
-
-RUN apk update && apk upgrade && \
-    apk add --no-cache bash git openssh && \
-    apk add build-base
-
-RUN apk add bash
-RUN apk add pcre-dev 
-RUN pip install --upgrade pip
-RUN apk add --update nodejs npm
-RUN apk --update add --virtual scipy-runtime python py-pip \
-    && apk add --virtual scipy-build \
-        build-base python-dev openblas-dev freetype-dev pkgconfig gfortran \
-    && ln -s /usr/include/locale.h /usr/include/xlocale.h \
-    && pip install --no-cache-dir numpy \ 
-    && pip install --no-cache-dir matplotlib \
-    && pip install --no-cache-dir scipy \
-    && apk del scipy-build \
-    && apk add --virtual scipy-runtime \
-        freetype libgfortran libgcc libpng  libstdc++ musl openblas tcl tk \
-    && rm -rf /var/cache/apk/*
-
-# Install python dependencies
-COPY requirements.txt requirements.txt
-RUN pip install -r requirements.txt
-RUN pip install git+https://github.com/LIAAD/py-pampo.git
-RUN pip install git+https://github.com/LIAAD/TemporalSummarizationFramework
-
-
-# Now install and build the demo
-COPY demo/ demo/
-RUN ./scripts/build_demo.py
-
+FROM ubuntu:latest
+WORKDIR /temp
+RUN apt-get update
+RUN apt-get install -y python3.7
+RUN apt-get install -y curl
+RUN curl -sL https://deb.nodesource.com/setup_12.x | bash -
+RUN apt-get install -y nodejs
+RUN apt-get install -y python3-lxml
+RUN apt-get install -y python3-pip
+RUN mkdir demo
+COPY /demo /temp/demo
+RUN cd demo
+RUN npm install -g serve
+ENV PYTHON_PACKAGES="\
+	bson \
+	flask \
+	flask_cors \
+	gevent \
+	pymongo \
+ 	werkzeug \
+        nltk \
+        pytz \
+        lxml \
+"
+RUN pip3 install --no-cache-dir $PYTHON_PACKAGES
+RUN cd ..
 COPY app.py app.py
-
-EXPOSE 8000
-
-CMD python app.py 
+COPY utils.py utils.py
+COPY lauch.sh lauch.sh
+EXPOSE 3000
+EXPOSE 8003
+CMD ./lauch.sh
