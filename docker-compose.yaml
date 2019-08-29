@@ -17,12 +17,3 @@ services:
     image: mongo:latest
     expose:
       - "27017"
-  liaadnlpserver:
-    image: liaadnlpserver
-    build: ./tools/nlp-microservices
-    environment:
-      - MODE=dev
-    volumes:
-      - ./tools/nlp-microservices:/code
-    ports:
-      - "9091:9091"
