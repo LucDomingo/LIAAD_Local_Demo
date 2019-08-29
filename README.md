@@ -9,8 +9,7 @@ docker-compose up
 ```
 # Add a new tool to the Demo
 ## Backend side
-First we assume you have a dockerized LIAAD model like an API REST. A good template to start would be at LucDomingo/Docker_Pampo
-.
+First we assume you have a dockerized LIAAD model like an API REST. A good template to start would be at https://github.com/LucDomingo/Docker_Pampo.
 Add your container as a service inside docker-compose.yaml :
 ```yaml
 ...
