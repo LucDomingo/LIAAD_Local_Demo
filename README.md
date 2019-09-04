@@ -7,6 +7,7 @@ Then run docker-compose.yaml :
 ```bash
 docker-compose up
 ```
+Finally visit localhost on port 3000.
 # Add a new tool to the Demo
 ## Backend side
 First we assume you have a dockerized LIAAD model like an API REST. A good template to start would be at https://github.com/LucDomingo/Docker_Pampo.
